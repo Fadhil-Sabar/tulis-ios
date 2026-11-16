@@ -405,12 +405,12 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
 
 extension InfiniteCanvasContainerView {
     private func applySyntheticPressureToNewPenStroke() {
-        guard toolConfig?.tool == .pen, let width = toolConfig?.width else { return }
+        guard toolConfig?.tool == .pen else { return }
         var strokes = inkCanvas.drawing.strokes
         guard let last = strokes.last, last.ink.inkType == .pen, last.path.count > 1 else { return }
         let forces = last.path.map(\.force)
         guard let first = forces.first, forces.allSatisfy({ abs($0 - first) < 0.001 }) else { return }
-        strokes[strokes.count - 1] = StrokeConversion.withSyntheticPressure(last, baseWidth: CGFloat(width))
+        strokes[strokes.count - 1] = StrokeConversion.withSyntheticPressure(last)
         isUpdatingInternally = true
         inkCanvas.drawing = PKDrawing(strokes: strokes)
         isUpdatingInternally = false

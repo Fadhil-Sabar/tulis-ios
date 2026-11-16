@@ -96,12 +96,12 @@ public enum StrokeConversion {
         return PKStroke(ink: PKInk(inkType, color: color), path: path, transform: transform)
     }
 
-    public static func withSyntheticPressure(_ stroke: PKStroke, baseWidth: CGFloat) -> PKStroke {
+    public static func withSyntheticPressure(_ stroke: PKStroke) -> PKStroke {
         let path = stroke.path
         let samples = path.map { (x: Float($0.location.x), y: Float($0.location.y), elapsedTimeMillis: StrokeMath.elapsedMillis(fromTimeOffsetSeconds: $0.timeOffset)) }
         let pressures = StrokeMath.syntheticPressures(points: samples)
         let points = zip(path, pressures).map { point, pressure in
-            let width = baseWidth * CGFloat(StrokeMath.penWidthFactor(pressure: pressure))
+            let width = point.size.width * CGFloat(StrokeMath.penWidthFactor(pressure: pressure))
             return PKStrokePoint(
                 location: point.location,
                 timeOffset: point.timeOffset,

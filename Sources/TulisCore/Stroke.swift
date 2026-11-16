@@ -286,7 +286,7 @@ public enum StrokeMath {
 
     public static func penWidthFactor(pressure: Float) -> Float {
         guard pressure >= 0 else { return 1 }
-        return 0.5 + min(pressure, 1) * 0.75
+        return 0.55 + min(pressure, 1) * 0.45
     }
 
     public static func syntheticPressures(

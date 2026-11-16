@@ -257,9 +257,9 @@ import Testing
 
 @Test func penWidthFactorMengikutiTekanan() {
     #expect(StrokeMath.penWidthFactor(pressure: StrokeConstants.noPressure) == 1)
-    #expect(StrokeMath.penWidthFactor(pressure: 0) == 0.5)
-    #expect(StrokeMath.penWidthFactor(pressure: 1) == 1.25)
-    #expect(StrokeMath.penWidthFactor(pressure: 2) == 1.25)
+    #expect(abs(StrokeMath.penWidthFactor(pressure: 0) - 0.55) < 1e-6)
+    #expect(StrokeMath.penWidthFactor(pressure: 1) == 1)
+    #expect(StrokeMath.penWidthFactor(pressure: 2) == 1)
 }
 
 @Test func tekananSintetisLebihTipisSaatCepat() {

@@ -261,7 +261,7 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
         case .marker:
             highlighterCanvas.isUserInteractionEnabled = false
             inkCanvas.isUserInteractionEnabled = true
-            inkCanvas.tool = PKInkingTool(.marker, color: uiCol, width: CGFloat(width))
+            inkCanvas.tool = PKInkingTool(.monoline, color: uiCol, width: CGFloat(width))
 
         case .highlighter:
             inkCanvas.isUserInteractionEnabled = false
@@ -398,7 +398,22 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
     // PKCanvasViewDelegate
     public func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
         guard !isUpdatingInternally, !isErasing else { return }
+        if canvasView === inkCanvas { applySyntheticPressureToNewPenStroke() }
         onDrawingChanged?()
+    }
+}
+
+extension InfiniteCanvasContainerView {
+    private func applySyntheticPressureToNewPenStroke() {
+        guard toolConfig?.tool == .pen, let width = toolConfig?.width else { return }
+        var strokes = inkCanvas.drawing.strokes
+        guard let last = strokes.last, last.ink.inkType == .pen, last.path.count > 1 else { return }
+        let forces = last.path.map(\.force)
+        guard let first = forces.first, forces.allSatisfy({ abs($0 - first) < 0.001 }) else { return }
+        strokes[strokes.count - 1] = StrokeConversion.withSyntheticPressure(last, baseWidth: CGFloat(width))
+        isUpdatingInternally = true
+        inkCanvas.drawing = PKDrawing(strokes: strokes)
+        isUpdatingInternally = false
     }
 }
 

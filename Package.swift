@@ -17,6 +17,10 @@ let package = Package(
         .target(name: "Tulis", dependencies: ["TulisCore"]),
         // Model dan format file, hanya Foundation, jalan juga di Linux.
         .target(name: "TulisCore"),
-        .testTarget(name: "TulisCoreTests", dependencies: ["TulisCore"]),
+        .testTarget(
+            name: "TulisCoreTests",
+            dependencies: ["TulisCore"],
+            resources: [.copy("Fixtures")]
+        ),
     ]
 )

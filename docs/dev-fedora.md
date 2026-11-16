@@ -191,13 +191,12 @@ Dua masalah ini muncul dengan Xcode 27.1 dan xtool 1.24.0 di Fedora 44:
    head -2 ~/.swiftpm/swift-sdks/darwin.artifactbundle/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib/swift/Swift.swiftmodule/arm64e-apple-ios.swiftinterface
    ```
    Pasang Swift dengan versi yang sama (`swiftly install 6.4.2 && swiftly use -g 6.4.2`), hapus `.build`, lalu build ulang.
-2. **Error `module '_c_standard_library_obsolete' requires feature 'found_incompatible_headers__check_search_paths'`**. Header bawaan clang di bundle SDK masih versi lama (`float.h` melakukan `include_next` untuk `__APPLE__`) sehingga bentrok dengan modulemap SDK iOS 27. Ganti dengan header clang dari toolchain Swift yang dipakai:
+2. **Error `module '_c_standard_library_obsolete' requires feature 'found_incompatible_headers__check_search_paths'`**. Saat `xtool sdk install`, xtool menyalin header bawaan clang dari toolchain Swift yang sedang aktif ke dalam bundle SDK. Kalau SDK dipasang saat Swift lama masih aktif, header lamanya bentrok dengan modulemap SDK iOS 27. Pasang ulang SDK setelah Swift yang benar aktif:
    ```bash
-   cd ~/.swiftpm/swift-sdks/darwin.artifactbundle/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21
-   mv include include.xcode-orig
-   cp -r ~/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include include
+   swift --version   # harus 6.4.x
+   xtool sdk remove
+   xtool sdk install ~/Downloads/Xcode_27.1.xip
    ```
-   Perbaikan ini hilang kalau SDK dipasang ulang, jadi ulangi setelah `xtool sdk install`.
 
 Setelah dua langkah ini, `xtool dev build` berhasil dan menghasilkan `xtool/Tulis.app` (arm64).
 

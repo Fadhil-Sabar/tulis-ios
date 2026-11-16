@@ -283,4 +283,30 @@ public enum StrokeMath {
         }
         return highlighters + others
     }
+
+    public static func penWidthFactor(pressure: Float) -> Float {
+        guard pressure >= 0 else { return 1 }
+        return 0.55 + min(pressure, 1) * 0.45
+    }
+
+    public static func syntheticPressures(
+        points: [(x: Float, y: Float, elapsedTimeMillis: Int64)],
+        fastSpeed: Float = 1800
+    ) -> [Float] {
+        var result: [Float] = []
+        result.reserveCapacity(points.count)
+        var smoothed: Float = 0.6
+        for i in points.indices {
+            if i > 0 {
+                let a = points[i - 1]
+                let b = points[i]
+                let dt = max(Float(b.elapsedTimeMillis - a.elapsedTimeMillis), 1) / 1000
+                let speed = hypot(b.x - a.x, b.y - a.y) / dt
+                let target = max(0.2, min(1, 1 - speed / fastSpeed))
+                smoothed += (target - smoothed) * 0.3
+            }
+            result.append(smoothed)
+        }
+        return result
+    }
 }

@@ -47,11 +47,12 @@ public enum StrokeConversion {
         )
     }
 
-    public static func pkStrokePoint(from point: StrokePoint, sizePx: Float) -> PKStrokePoint {
-        PKStrokePoint(
+    public static func pkStrokePoint(from point: StrokePoint, sizePx: Float, brushKind: BrushKind) -> PKStrokePoint {
+        let width = brushKind == .pen ? sizePx * StrokeMath.penWidthFactor(pressure: point.pressure) : sizePx
+        return PKStrokePoint(
             location: CGPoint(x: CGFloat(point.x), y: CGFloat(point.y)),
             timeOffset: StrokeMath.timeOffsetSeconds(fromElapsedMillis: point.elapsedTimeMillis),
-            size: CGSize(width: CGFloat(sizePx), height: CGFloat(sizePx)),
+            size: CGSize(width: CGFloat(width), height: CGFloat(width)),
             opacity: 1,
             force: point.hasPressure ? CGFloat(point.pressure) : 1,
             azimuth: point.hasOrientation ? CGFloat(StrokeMath.azimuth(fromOrientationRadians: point.orientationRadians)) : 0,
@@ -79,7 +80,7 @@ public enum StrokeConversion {
             inkType = .pen
             color = uiColor(fromArgb: stroke.colorArgb)
         case .marker:
-            inkType = .marker
+            inkType = .monoline
             color = uiColor(fromArgb: stroke.colorArgb)
         case .highlighter:
             inkType = .marker
@@ -88,32 +89,61 @@ public enum StrokeConversion {
             color = UIColor(red: CGFloat(r), green: CGFloat(g), blue: CGFloat(b), alpha: CGFloat(highAlpha))
         }
 
-        let points = stroke.points.map { pkStrokePoint(from: $0, sizePx: stroke.sizePx) }
+        let points = stroke.points.map { pkStrokePoint(from: $0, sizePx: stroke.sizePx, brushKind: stroke.brushKind) }
 
         let path = PKStrokePath(controlPoints: points, creationDate: Date())
         let transform = cgAffineTransform(from: stroke.strokeToWorld)
         return PKStroke(ink: PKInk(inkType, color: color), path: path, transform: transform)
     }
 
-    public static func stroke(from pkStroke: PKStroke) -> Stroke {
+    public static func withSyntheticPressure(_ stroke: PKStroke) -> PKStroke {
+        let path = stroke.path
+        let samples = path.map { (x: Float($0.location.x), y: Float($0.location.y), elapsedTimeMillis: StrokeMath.elapsedMillis(fromTimeOffsetSeconds: $0.timeOffset)) }
+        let pressures = StrokeMath.syntheticPressures(points: samples)
+        let points = zip(path, pressures).map { point, pressure in
+            let width = point.size.width * CGFloat(StrokeMath.penWidthFactor(pressure: pressure))
+            return PKStrokePoint(
+                location: point.location,
+                timeOffset: point.timeOffset,
+                size: CGSize(width: width, height: width),
+                opacity: point.opacity,
+                force: CGFloat(pressure),
+                azimuth: point.azimuth,
+                altitude: point.altitude
+            )
+        }
+        let newPath = PKStrokePath(controlPoints: points, creationDate: path.creationDate)
+        return PKStroke(ink: stroke.ink, path: newPath, transform: stroke.transform, mask: stroke.mask)
+    }
+
+    public static func stroke(from pkStroke: PKStroke, explicitBrushKind: BrushKind? = nil) -> Stroke {
         let (_, _, _, a) = StrokeMath.rgbaComponents(fromArgb: argb(fromUiColor: pkStroke.ink.color))
         let brushKind: BrushKind
 
-        switch pkStroke.ink.inkType {
-        case .pen:
-            brushKind = .pen
-        case .marker:
-            if a <= 0.5 {
-                brushKind = .highlighter
-            } else {
+        if let explicit = explicitBrushKind {
+            brushKind = explicit
+        } else {
+            switch pkStroke.ink.inkType {
+            case .pen:
+                brushKind = .pen
+            case .monoline:
                 brushKind = .marker
+            case .marker:
+                if a <= 0.5 {
+                    brushKind = .highlighter
+                } else {
+                    brushKind = .marker
+                }
+            default:
+                brushKind = .pen
             }
-        default:
-            brushKind = .pen
         }
 
         let points = pkStroke.path.map { strokePoint(from: $0) }
-        let sizePx = Float(pkStroke.path.first?.size.width ?? 3.0)
+        let firstWidth = Float(pkStroke.path.first?.size.width ?? 3.0)
+        let sizePx = brushKind == .pen
+            ? firstWidth / StrokeMath.penWidthFactor(pressure: points.first?.pressure ?? -1)
+            : firstWidth
         let transform = affineTransform(from: pkStroke.transform)
         let colorArgb = argb(fromUiColor: pkStroke.ink.color)
 
@@ -136,8 +166,8 @@ extension Stroke {
 }
 
 extension PKStroke {
-    public func toStroke() -> Stroke {
-        StrokeConversion.stroke(from: self)
+    public func toStroke(brushKind: BrushKind? = nil) -> Stroke {
+        StrokeConversion.stroke(from: self, explicitBrushKind: brushKind)
     }
 }
 

@@ -254,3 +254,20 @@ import Testing
     let decoded = try JSONDecoder().decode(PageContent.self, from: data)
     #expect(decoded == content)
 }
+
+@Test func penWidthFactorMengikutiTekanan() {
+    #expect(StrokeMath.penWidthFactor(pressure: StrokeConstants.noPressure) == 1)
+    #expect(abs(StrokeMath.penWidthFactor(pressure: 0) - 0.55) < 1e-6)
+    #expect(StrokeMath.penWidthFactor(pressure: 1) == 1)
+    #expect(StrokeMath.penWidthFactor(pressure: 2) == 1)
+}
+
+@Test func tekananSintetisLebihTipisSaatCepat() {
+    let lambat = (0..<20).map { (x: Float($0) * 1, y: Float(0), elapsedTimeMillis: Int64($0) * 16) }
+    let cepat = (0..<20).map { (x: Float($0) * 40, y: Float(0), elapsedTimeMillis: Int64($0) * 16) }
+    let pLambat = StrokeMath.syntheticPressures(points: lambat)
+    let pCepat = StrokeMath.syntheticPressures(points: cepat)
+    #expect(pLambat.count == 20)
+    #expect(pLambat.last! > pCepat.last!)
+    #expect(pCepat.allSatisfy { $0 >= 0.2 && $0 <= 1 })
+}

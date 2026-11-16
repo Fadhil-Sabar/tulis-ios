@@ -16,6 +16,8 @@ Dengan Apple ID gratis, signing berlaku 7 hari. Setelah itu aplikasi perlu di-si
 
 Panduan penyiapan khusus Fedora (paket DNF, udev, SELinux, dan pemecahan masalah) didokumentasikan di [docs/dev-fedora.md](docs/dev-fedora.md).
 
+Untuk memasang tanpa kabel lewat SideStore, pakai `Tulis.ipa` dari artifact CI. Caranya di [docs/sideload.md](docs/sideload.md).
+
 Simulator iOS hanya ada di macOS. CI membangun aplikasi untuk simulator di runner macOS GitHub Actions.
 
 ## Test

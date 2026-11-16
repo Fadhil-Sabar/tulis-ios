@@ -38,6 +38,7 @@ jobs:
         shell: bash -eo pipefail {0}
     env:
       XTOOL_VERSION: 1.24.0
+      DARWIN_SDK_VERSION: epoch=4,darwinTools=1.1.0,oam=1.4.1
     steps:
       - uses: actions/checkout@v5
       - name: Buat project Xcode dengan xtool
@@ -46,6 +47,12 @@ jobs:
           curl -fsSL -o /tmp/xtool.AppImage "https://github.com/xtool-org/xtool/releases/download/${XTOOL_VERSION}/xtool-x86_64.AppImage"
           chmod +x /tmp/xtool.AppImage
           (cd /tmp && ./xtool.AppImage --appimage-extract > /dev/null)
+          for home in "$HOME" /root; do
+            sdk="$home/.swiftpm/swift-sdks/darwin.artifactbundle"
+            mkdir -p "$sdk"
+            printf '%s' "$DARWIN_SDK_VERSION" > "$sdk/darwin-sdk-version.txt"
+            printf '{"schemaVersion":"1.0","artifacts":{"darwin":{"type":"swiftSDK","version":"0.0.1","variants":[{"path":".","supportedTriples":["x86_64-unknown-linux-gnu","aarch64-unknown-linux-gnu"]}]}}}' > "$sdk/info.json"
+          done
           true | /tmp/squashfs-root/usr/bin/xtool dev generate-xcode-project 2>&1 | cat
           test -f xtool/.xtool-tmp/Tulis.xcodeproj/project.pbxproj
       - uses: actions/upload-artifact@v4

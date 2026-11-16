@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  core-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift test
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - run: xcodebuild -version
+      - name: Build untuk iOS Simulator
+        run: >
+          xcodebuild build
+          -scheme Tulis
+          -destination 'generic/platform=iOS Simulator'
+          -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO

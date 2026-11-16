@@ -10,3 +10,5 @@ DerivedData/
 
 /xtool
 /NOTES*.md
+/.bsp
+/.sourcekit-lsp

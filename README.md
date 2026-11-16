@@ -14,6 +14,8 @@ Proyek ini berupa paket SwiftPM yang dibangun dengan [xtool](https://xtool.sh), 
 
 Dengan Apple ID gratis, signing berlaku 7 hari. Setelah itu aplikasi perlu di-sign ulang. Data tetap aman selama aplikasinya tidak dihapus.
 
+Panduan penyiapan khusus Fedora (paket DNF, udev, SELinux, dan pemecahan masalah) didokumentasikan di [docs/dev-fedora.md](docs/dev-fedora.md).
+
 Simulator iOS hanya ada di macOS. CI membangun aplikasi untuk simulator di runner macOS GitHub Actions.
 
 ## Test

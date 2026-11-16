@@ -117,10 +117,10 @@ public final class EditorViewModel: ObservableObject {
     }
 
     public func handleViewportChanged(scale: Float, tx: Float, ty: Float) {
-        notebookMeta.vpScale = scale
-        notebookMeta.vpTx = tx
-        notebookMeta.vpTy = ty
-        zoomPercentage = Int((scale * 100.0).rounded())
+        let percentage = Int((scale * 100.0).rounded())
+        if percentage != zoomPercentage {
+            zoomPercentage = percentage
+        }
         isMetaDirty = true
         scheduleAutosave()
     }

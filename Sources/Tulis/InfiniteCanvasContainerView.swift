@@ -5,6 +5,7 @@ import PencilKit
 import SwiftUI
 import TulisCore
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PKCanvasViewDelegate {
     public static let worldOrigin = CGPoint(x: 100_000.0, y: 100_000.0)
@@ -24,7 +25,9 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
 
     private var activeTool: Tool = .pen
     public private(set) var isErasing = false
-    private lazy var eraserGesture = UIPanGestureRecognizer(target: self, action: #selector(handleErase(_:)))
+    private lazy var eraserGesture = ImmediateDragGestureRecognizer(target: self, action: #selector(handleErase(_:)))
+    private var lastErasePoint: CGPoint?
+    private var toolConfig: ToolConfig?
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -69,51 +72,63 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
         highlighterCanvas.delegate = self
         inkCanvas.delegate = self
 
-        eraserGesture.maximumNumberOfTouches = 1
         eraserGesture.isEnabled = false
         inkCanvas.addGestureRecognizer(eraserGesture)
     }
 
-    @objc private func handleErase(_ gesture: UIPanGestureRecognizer) {
+    @objc private func handleErase(_ gesture: ImmediateDragGestureRecognizer) {
+        let location = gesture.location(in: inkCanvas)
+        let scale = max(inkCanvas.zoomScale, 0.01)
+        let point = CGPoint(x: location.x / scale, y: location.y / scale)
         switch gesture.state {
         case .began:
             isErasing = true
-            eraseAt(gesture.location(in: inkCanvas))
+            lastErasePoint = point
+            erase(from: point, to: point, radius: 18 / scale)
         case .changed:
-            eraseAt(gesture.location(in: inkCanvas))
+            erase(from: lastErasePoint ?? point, to: point, radius: 18 / scale)
+            lastErasePoint = point
         case .ended, .cancelled, .failed:
             isErasing = false
+            lastErasePoint = nil
             onDrawingChanged?()
         default:
             break
         }
     }
 
-    private func eraseAt(_ location: CGPoint) {
-        let scale = max(inkCanvas.zoomScale, 0.01)
-        let point = CGPoint(x: location.x / scale, y: location.y / scale)
-        let radius = 12 / scale
-        if let ink = Self.drawing(inkCanvas.drawing, erasingAt: point, radius: radius) {
+    private func erase(from start: CGPoint, to end: CGPoint, radius: CGFloat) {
+        if let ink = Self.drawing(inkCanvas.drawing, erasingFrom: start, to: end, radius: radius) {
             inkCanvas.drawing = ink
         }
-        if let highlighter = Self.drawing(highlighterCanvas.drawing, erasingAt: point, radius: radius) {
+        if let highlighter = Self.drawing(highlighterCanvas.drawing, erasingFrom: start, to: end, radius: radius) {
             highlighterCanvas.drawing = highlighter
         }
     }
 
-    private static func drawing(_ drawing: PKDrawing, erasingAt point: CGPoint, radius: CGFloat) -> PKDrawing? {
-        let kept = drawing.strokes.filter { !stroke($0, hits: point, radius: radius) }
+    private static func drawing(_ drawing: PKDrawing, erasingFrom start: CGPoint, to end: CGPoint, radius: CGFloat) -> PKDrawing? {
+        let sweep = CGRect(
+            x: min(start.x, end.x), y: min(start.y, end.y),
+            width: abs(end.x - start.x), height: abs(end.y - start.y)
+        ).insetBy(dx: -radius, dy: -radius)
+        let kept = drawing.strokes.filter { stroke in
+            guard stroke.renderBounds.intersects(sweep) else { return true }
+            return !stroke.path.interpolatedPoints(by: .distance(2)).contains { sample in
+                let p = sample.location.applying(stroke.transform)
+                let reach = radius + max(sample.size.width, sample.size.height) / 2
+                return distance(from: p, toSegment: start, end) <= reach
+            }
+        }
         return kept.count == drawing.strokes.count ? nil : PKDrawing(strokes: kept)
     }
 
-    private static func stroke(_ stroke: PKStroke, hits point: CGPoint, radius: CGFloat) -> Bool {
-        guard stroke.renderBounds.insetBy(dx: -radius, dy: -radius).contains(point) else { return false }
-        for sample in stroke.path.interpolatedPoints(by: .distance(2)) {
-            let p = sample.location.applying(stroke.transform)
-            let reach = radius + max(sample.size.width, sample.size.height) / 2
-            if hypot(p.x - point.x, p.y - point.y) <= reach { return true }
-        }
-        return false
+    private static func distance(from p: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let lengthSquared = dx * dx + dy * dy
+        guard lengthSquared > 0 else { return hypot(p.x - a.x, p.y - a.y) }
+        let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared))
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
     }
 
     private func configureCanvas(_ canvas: PKCanvasView) {
@@ -219,6 +234,9 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
     }
 
     public func applyTool(tool: Tool, color: Int32, width: Float, fingerDraws: Bool) {
+        let config = ToolConfig(tool: tool, color: color, width: width, fingerDraws: fingerDraws)
+        guard config != toolConfig else { return }
+        toolConfig = config
         self.activeTool = tool
 
         let uiCol = StrokeConversion.uiColor(fromArgb: color)
@@ -381,6 +399,35 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
     public func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
         guard !isUpdatingInternally, !isErasing else { return }
         onDrawingChanged?()
+    }
+}
+
+private struct ToolConfig: Equatable {
+    let tool: Tool
+    let color: Int32
+    let width: Float
+    let fingerDraws: Bool
+}
+
+public final class ImmediateDragGestureRecognizer: UIGestureRecognizer {
+    public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard touches.count == 1, numberOfTouches <= 1 else {
+            state = state == .possible ? .failed : .cancelled
+            return
+        }
+        state = .began
+    }
+
+    public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = .changed
+    }
+
+    public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = .ended
+    }
+
+    public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = .cancelled
     }
 }
 

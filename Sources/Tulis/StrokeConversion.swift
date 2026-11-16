@@ -95,21 +95,25 @@ public enum StrokeConversion {
         return PKStroke(ink: PKInk(inkType, color: color), path: path, transform: transform)
     }
 
-    public static func stroke(from pkStroke: PKStroke) -> Stroke {
+    public static func stroke(from pkStroke: PKStroke, explicitBrushKind: BrushKind? = nil) -> Stroke {
         let (_, _, _, a) = StrokeMath.rgbaComponents(fromArgb: argb(fromUiColor: pkStroke.ink.color))
         let brushKind: BrushKind
 
-        switch pkStroke.ink.inkType {
-        case .pen:
-            brushKind = .pen
-        case .marker:
-            if a <= 0.5 {
-                brushKind = .highlighter
-            } else {
-                brushKind = .marker
+        if let explicit = explicitBrushKind {
+            brushKind = explicit
+        } else {
+            switch pkStroke.ink.inkType {
+            case .pen:
+                brushKind = .pen
+            case .marker:
+                if a <= 0.5 {
+                    brushKind = .highlighter
+                } else {
+                    brushKind = .marker
+                }
+            default:
+                brushKind = .pen
             }
-        default:
-            brushKind = .pen
         }
 
         let points = pkStroke.path.map { strokePoint(from: $0) }
@@ -136,8 +140,8 @@ extension Stroke {
 }
 
 extension PKStroke {
-    public func toStroke() -> Stroke {
-        StrokeConversion.stroke(from: self)
+    public func toStroke(brushKind: BrushKind? = nil) -> Stroke {
+        StrokeConversion.stroke(from: self, explicitBrushKind: brushKind)
     }
 }
 

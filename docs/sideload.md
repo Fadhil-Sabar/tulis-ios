@@ -7,7 +7,7 @@ Setiap push ke `main` dan setiap pull request menghasilkan `Tulis.ipa` tanpa sig
 Job `ipa` di `.github/workflows/ci.yml` berjalan di runner macOS:
 
 1. Mengunduh `xtool.app` resmi (versi di `XTOOL_VERSION`).
-2. Menjalankan `xtool dev build`, perintah yang sama dengan build lokal di Fedora. Hasilnya `xtool/Tulis.app`.
+2. Menjalankan `xtool dev generate-xcode-project` untuk membuat project Xcode dari paket SwiftPM, lalu `xcodebuild` tanpa signing. `xtool dev build` di runner macOS macet tanpa output, jadi build dilakukan oleh `xcodebuild`.
 3. Menyalin app ke `Payload/Tulis.app` lalu mengemasnya jadi `Tulis.ipa`.
 
 Alasan memakai xtool, bukan `xcodebuild archive`: paket ini berupa SwiftPM dengan library product, jadi `xcodebuild` tidak menghasilkan `.app`. xtool yang menyusun bundle aplikasi beserta `Info.plist`, sama seperti di lokal. Menjalankan xtool di runner Linux juga tidak bisa karena butuh `Xcode.xip` yang tidak boleh disebarkan.

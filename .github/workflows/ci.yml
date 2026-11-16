@@ -31,6 +31,7 @@ jobs:
 
   ipa:
     runs-on: macos-15
+    timeout-minutes: 30
     env:
       XTOOL_VERSION: 1.24.0
     steps:
@@ -40,12 +41,26 @@ jobs:
           curl -fsSL -o xtool.app.zip "https://github.com/xtool-org/xtool/releases/download/${XTOOL_VERSION}/xtool.app.zip"
           ditto -x -k xtool.app.zip "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/xtool.app/Contents/MacOS" >> "$GITHUB_PATH"
-      - name: Build Tulis.app
-        run: xtool dev build
-      - name: Bungkus Tulis.ipa tanpa signing
+      - name: Buat project Xcode
+        timeout-minutes: 5
+        run: xtool dev generate-xcode-project < /dev/null
+      - name: Build Tulis.app tanpa signing
+        timeout-minutes: 20
+        run: >
+          xcodebuild build
+          -workspace xtool/Tulis.xcworkspace
+          -scheme Tulis-App
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -derivedDataPath build
+          -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO
+      - name: Bungkus Tulis.ipa
         run: |
+          app=$(find build/Build/Products -maxdepth 2 -name 'Tulis.app' -type d | head -1)
+          test -n "$app"
           mkdir Payload
-          cp -R xtool/Tulis.app Payload/
+          cp -R "$app" Payload/
           zip -qry Tulis.ipa Payload
       - uses: actions/upload-artifact@v4
         with:

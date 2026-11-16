@@ -28,3 +28,67 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           -skipMacroValidation
           CODE_SIGNING_ALLOWED=NO
+
+  xcodeproj:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    env:
+      XTOOL_VERSION: 1.24.0
+      DARWIN_SDK_VERSION: epoch=4,darwinTools=1.1.0,oam=1.4.1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Buat project Xcode dengan xtool
+        run: |
+          apt-get update -qq && apt-get install -y -qq curl > /dev/null
+          curl -fsSL -o /tmp/xtool.AppImage "https://github.com/xtool-org/xtool/releases/download/${XTOOL_VERSION}/xtool-x86_64.AppImage"
+          chmod +x /tmp/xtool.AppImage
+          (cd /tmp && ./xtool.AppImage --appimage-extract > /dev/null)
+          for home in "$HOME" /root; do
+            sdk="$home/.swiftpm/swift-sdks/darwin.artifactbundle"
+            mkdir -p "$sdk"
+            printf '%s' "$DARWIN_SDK_VERSION" > "$sdk/darwin-sdk-version.txt"
+            printf '{"schemaVersion":"1.0","artifacts":{"darwin":{"type":"swiftSDK","version":"0.0.1","variants":[{"path":".","supportedTriples":["x86_64-unknown-linux-gnu","aarch64-unknown-linux-gnu"]}]}}}' > "$sdk/info.json"
+          done
+          true | /tmp/squashfs-root/usr/bin/xtool dev generate-xcode-project 2>&1 | cat
+          test -f xtool/.xtool-tmp/Tulis.xcodeproj/project.pbxproj
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcodeproj
+          path: xtool
+          include-hidden-files: true
+
+  ipa:
+    needs: xcodeproj
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcodeproj
+          path: xtool
+      - name: Build Tulis.app tanpa signing
+        run: >
+          xcodebuild build
+          -workspace xtool/Tulis.xcworkspace
+          -scheme Tulis-App
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -derivedDataPath build
+          -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO
+      - name: Bungkus Tulis.ipa
+        run: |
+          app=$(find build/Build/Products -maxdepth 2 -name '*.app' -type d | head -1)
+          test -n "$app"
+          mkdir Payload
+          cp -R "$app" Payload/
+          zip -qry Tulis.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tulis.ipa
+          path: Tulis.ipa

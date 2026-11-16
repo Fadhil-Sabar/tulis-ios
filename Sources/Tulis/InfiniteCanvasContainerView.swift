@@ -23,7 +23,8 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
     private var isInitializingViewport = false
 
     private var activeTool: Tool = .pen
-    private var lastDrawingTool: Tool = .pen
+    public private(set) var isErasing = false
+    private lazy var eraserGesture = UIPanGestureRecognizer(target: self, action: #selector(handleErase(_:)))
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -67,6 +68,52 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
 
         highlighterCanvas.delegate = self
         inkCanvas.delegate = self
+
+        eraserGesture.maximumNumberOfTouches = 1
+        eraserGesture.isEnabled = false
+        inkCanvas.addGestureRecognizer(eraserGesture)
+    }
+
+    @objc private func handleErase(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            isErasing = true
+            eraseAt(gesture.location(in: inkCanvas))
+        case .changed:
+            eraseAt(gesture.location(in: inkCanvas))
+        case .ended, .cancelled, .failed:
+            isErasing = false
+            onDrawingChanged?()
+        default:
+            break
+        }
+    }
+
+    private func eraseAt(_ location: CGPoint) {
+        let scale = max(inkCanvas.zoomScale, 0.01)
+        let point = CGPoint(x: location.x / scale, y: location.y / scale)
+        let radius = 12 / scale
+        if let ink = Self.drawing(inkCanvas.drawing, erasingAt: point, radius: radius) {
+            inkCanvas.drawing = ink
+        }
+        if let highlighter = Self.drawing(highlighterCanvas.drawing, erasingAt: point, radius: radius) {
+            highlighterCanvas.drawing = highlighter
+        }
+    }
+
+    private static func drawing(_ drawing: PKDrawing, erasingAt point: CGPoint, radius: CGFloat) -> PKDrawing? {
+        let kept = drawing.strokes.filter { !stroke($0, hits: point, radius: radius) }
+        return kept.count == drawing.strokes.count ? nil : PKDrawing(strokes: kept)
+    }
+
+    private static func stroke(_ stroke: PKStroke, hits point: CGPoint, radius: CGFloat) -> Bool {
+        guard stroke.renderBounds.insetBy(dx: -radius, dy: -radius).contains(point) else { return false }
+        for sample in stroke.path.interpolatedPoints(by: .distance(2)) {
+            let p = sample.location.applying(stroke.transform)
+            let reach = radius + max(sample.size.width, sample.size.height) / 2
+            if hypot(p.x - point.x, p.y - point.y) <= reach { return true }
+        }
+        return false
     }
 
     private func configureCanvas(_ canvas: PKCanvasView) {
@@ -173,9 +220,6 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
 
     public func applyTool(tool: Tool, color: Int32, width: Float, fingerDraws: Bool) {
         self.activeTool = tool
-        if tool == .pen || tool == .marker || tool == .highlighter {
-            lastDrawingTool = tool
-        }
 
         let uiCol = StrokeConversion.uiColor(fromArgb: color)
         let drawPolicy: PKCanvasViewDrawingPolicy = fingerDraws ? .anyInput : .pencilOnly
@@ -183,9 +227,12 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
         highlighterCanvas.drawingPolicy = drawPolicy
         inkCanvas.drawingPolicy = drawPolicy
 
-        // Restore drawing gesture recognizer
         inkCanvas.drawingGestureRecognizer.isEnabled = true
         highlighterCanvas.drawingGestureRecognizer.isEnabled = true
+        eraserGesture.isEnabled = tool == .eraser
+        let panTouches = fingerDraws ? 2 : 1
+        inkCanvas.panGestureRecognizer.minimumNumberOfTouches = panTouches
+        highlighterCanvas.panGestureRecognizer.minimumNumberOfTouches = panTouches
 
         switch tool {
         case .pen:
@@ -206,22 +253,18 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
             highlighterCanvas.tool = PKInkingTool(.marker, color: highColor, width: CGFloat(width))
 
         case .eraser:
-            let eraserTool = PKEraserTool(.vector)
-            // Penghapus bekerja di lapisan tinta, dan di lapisan stabilo bila alat stabilo terakhir aktif
-            if lastDrawingTool == .highlighter {
-                inkCanvas.isUserInteractionEnabled = false
-                highlighterCanvas.isUserInteractionEnabled = true
-                highlighterCanvas.tool = eraserTool
-            } else {
-                highlighterCanvas.isUserInteractionEnabled = false
-                inkCanvas.isUserInteractionEnabled = true
-                inkCanvas.tool = eraserTool
-            }
+            highlighterCanvas.isUserInteractionEnabled = false
+            inkCanvas.isUserInteractionEnabled = true
+            inkCanvas.drawingGestureRecognizer.isEnabled = false
+            eraserGesture.allowedTouchTypes = fingerDraws
+                ? [NSNumber(value: UITouch.TouchType.direct.rawValue), NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+                : [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
 
         case .pan:
             highlighterCanvas.isUserInteractionEnabled = false
             inkCanvas.isUserInteractionEnabled = true
             inkCanvas.drawingGestureRecognizer.isEnabled = false
+            inkCanvas.panGestureRecognizer.minimumNumberOfTouches = 1
 
         default:
             highlighterCanvas.isUserInteractionEnabled = false
@@ -336,7 +379,7 @@ public final class InfiniteCanvasContainerView: UIView, UIScrollViewDelegate, PK
 
     // PKCanvasViewDelegate
     public func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-        guard !isUpdatingInternally else { return }
+        guard !isUpdatingInternally, !isErasing else { return }
         onDrawingChanged?()
     }
 }

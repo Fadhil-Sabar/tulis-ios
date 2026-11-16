@@ -41,6 +41,11 @@ public final class UnifiedUndoManager {
     /// Dipanggil saat canvasViewDrawingDidChange:
     /// push lastSnapshot ke undo stack, update lastSnapshot = state sekarang, kosongkan redo stack.
     public func recordDrawingChange(currentInk: PKDrawing, currentHighlighter: PKDrawing) {
+        if let prev = lastSnapshot,
+           Self.sameContent(prev.inkDrawing, currentInk),
+           Self.sameContent(prev.highlighterDrawing, currentHighlighter) {
+            return
+        }
         if let prev = lastSnapshot {
             undoStack.append(prev)
             if undoStack.count > maxHistoryDepth {
@@ -72,6 +77,10 @@ public final class UnifiedUndoManager {
         lastSnapshot = target
         onChange?()
         return target
+    }
+
+    private static func sameContent(_ a: PKDrawing, _ b: PKDrawing) -> Bool {
+        a.strokes.count == b.strokes.count && a.bounds == b.bounds
     }
 
     public func clear() {

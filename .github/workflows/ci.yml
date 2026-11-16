@@ -29,23 +29,38 @@ jobs:
           -skipMacroValidation
           CODE_SIGNING_ALLOWED=NO
 
-  ipa:
-    runs-on: macos-15
-    timeout-minutes: 30
+  xcodeproj:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    timeout-minutes: 15
     env:
       XTOOL_VERSION: 1.24.0
     steps:
       - uses: actions/checkout@v5
-      - name: Pasang xtool
+      - name: Buat project Xcode dengan xtool
         run: |
-          curl -fsSL -o xtool.app.zip "https://github.com/xtool-org/xtool/releases/download/${XTOOL_VERSION}/xtool.app.zip"
-          ditto -x -k xtool.app.zip "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/xtool.app/Contents/MacOS" >> "$GITHUB_PATH"
-      - name: Buat project Xcode
-        timeout-minutes: 5
-        run: xtool dev generate-xcode-project < /dev/null
+          curl -fsSL -o /tmp/xtool.AppImage "https://github.com/xtool-org/xtool/releases/download/${XTOOL_VERSION}/xtool-x86_64.AppImage"
+          chmod +x /tmp/xtool.AppImage
+          (cd /tmp && ./xtool.AppImage --appimage-extract > /dev/null)
+          /tmp/squashfs-root/usr/bin/xtool dev generate-xcode-project < /dev/null
+          test -f xtool/.xtool-tmp/Tulis.xcodeproj/project.pbxproj
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcodeproj
+          path: xtool
+          include-hidden-files: true
+
+  ipa:
+    needs: xcodeproj
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcodeproj
+          path: xtool
       - name: Build Tulis.app tanpa signing
-        timeout-minutes: 20
         run: >
           xcodebuild build
           -workspace xtool/Tulis.xcworkspace
@@ -57,7 +72,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
       - name: Bungkus Tulis.ipa
         run: |
-          app=$(find build/Build/Products -maxdepth 2 -name 'Tulis.app' -type d | head -1)
+          app=$(find build/Build/Products -maxdepth 2 -name '*.app' -type d | head -1)
           test -n "$app"
           mkdir Payload
           cp -R "$app" Payload/

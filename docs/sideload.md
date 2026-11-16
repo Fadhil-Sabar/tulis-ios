@@ -4,13 +4,12 @@ Setiap push ke `main` dan setiap pull request menghasilkan `Tulis.ipa` tanpa sig
 
 ## Cara CI membuat IPA
 
-Job `ipa` di `.github/workflows/ci.yml` berjalan di runner macOS:
+Dua job di `.github/workflows/ci.yml`:
 
-1. Mengunduh `xtool.app` resmi (versi di `XTOOL_VERSION`).
-2. Menjalankan `xtool dev generate-xcode-project` untuk membuat project Xcode dari paket SwiftPM, lalu `xcodebuild` tanpa signing. `xtool dev build` di runner macOS macet tanpa output, jadi build dilakukan oleh `xcodebuild`.
-3. Menyalin app ke `Payload/Tulis.app` lalu mengemasnya jadi `Tulis.ipa`.
+1. `xcodeproj` (Linux, container `swift:6.1`): mengunduh AppImage xtool (versi di `XTOOL_VERSION`) lalu menjalankan `xtool dev generate-xcode-project`. Langkah ini tidak butuh SDK iOS. Hasilnya folder `xtool/` diunggah sebagai artifact.
+2. `ipa` (macOS): menjalankan `xcodebuild` tanpa signing dari project itu, lalu mengemas `Payload/<app>.app` jadi `Tulis.ipa`.
 
-Alasan memakai xtool, bukan `xcodebuild archive`: paket ini berupa SwiftPM dengan library product, jadi `xcodebuild` tidak menghasilkan `.app`. xtool yang menyusun bundle aplikasi beserta `Info.plist`, sama seperti di lokal. Menjalankan xtool di runner Linux juga tidak bisa karena butuh `Xcode.xip` yang tidak boleh disebarkan.
+Alasan pembagiannya: paket ini berupa SwiftPM dengan library product, jadi `xcodebuild` langsung tidak menghasilkan `.app`, dan xtool yang menyusun target aplikasinya. xtool versi macOS macet tanpa output di runner GitHub, sedangkan versi Linux jalan normal. Build di Linux saja juga tidak bisa karena butuh `Xcode.xip` yang tidak boleh disebarkan.
 
 ## Prasyarat
 
